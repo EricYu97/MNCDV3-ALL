@@ -1,0 +1,23 @@
+model_name : Tiny_CD
+dataset_name : MNCDV3
+data_type : MNCDV3 #HG is another option
+dataset_path : /bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112
+input_nc : 9
+num_classes : 2
+push_to_hub : False
+
+train:
+  epochs : 50
+  batch_size : 16
+  lr : 0.00356799066427741
+  weight_decay: 0.009449677083344786
+  loss: BCE
+  snapshots_dir : ./checkpoints/
+  optim : AdamW
+  save_intervals : 1
+eval:
+  batch_size : 32
+  evaluator: torchmetrics
+test:
+  batch_size : 32
+  save_path : ./results/

@@ -1,0 +1,22 @@
+model_name : SNUNet
+dataset_name : MNCDV2
+data_type : MNCD #HG is another option
+dataset_path : /Users/weikangyu/Documents/MNCDV2/MineNetCDV2_Cropped160_Step160
+input_nc : 10
+num_classes : 2
+push_to_hub : False
+
+train:
+  epochs : 10
+  batch_size : 64
+  lr : 0.0001
+  loss: CrossEntropy
+  snapshots_dir : ./checkpoints/
+  optim : Adam
+  save_intervals : 1
+eval:
+  batch_size : 32
+  evaluator: torchmetrics
+test:
+  batch_size : 32
+  save_path : ./results/
