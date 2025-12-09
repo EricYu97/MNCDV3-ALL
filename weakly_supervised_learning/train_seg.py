@@ -219,8 +219,8 @@ def main(args):
                 # Reset the parameter gradients
 
                 # Forward pass
-                
-                    images, labels=batch["images"], batch["labels"]
+
+                    images, labels=batch["images"]["pre"], batch["labels"]["pre"]
 
                     outputs = model(images)
 

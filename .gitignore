@@ -21,3 +21,5 @@ wheels/
 *.csv
 *.pth
 .DS_Store
+*.json
+*.safetensors
