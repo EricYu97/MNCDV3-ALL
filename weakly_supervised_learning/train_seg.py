@@ -40,8 +40,8 @@ def collate_fn(batch):
 
     processor=Mask2FormerImageProcessor(ignore_index=-1,reduce_labels=False, do_resize=False, do_rescale=False, do_normalize=False)
 
-    images = [b["images"] for b in batch]
-    segmentation_maps = [b["labels"] for b in batch]
+    images = [b["images"]["pre"] for b in batch]
+    segmentation_maps = [b["labels"]["pre"] for b in batch]
 
 
     batch = processor(
@@ -81,9 +81,6 @@ def main(args):
         config.backbone_config.image_size = args.img_size
         model=UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-base", config=config, ignore_mismatched_sizes=True)
         model_type="huggingface"
-    elif args.model=="UperNet_ViT":
-        model=UperNet_Vit()
-        model_type="standalone"
     elif args.model=="UperNet_SwinT":
         config = UperNetConfig.from_pretrained("openmmlab/upernet-swin-base", num_labels=args.num_classes_seg, ignore_mismatched_sizes=True)
         config.backbone_config.num_channels = args.num_channels
