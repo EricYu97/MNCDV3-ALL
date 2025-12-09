@@ -1,0 +1,70 @@
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=VGG16_Weights.IMAGENET1K_V1`. You can also use `weights=VGG16_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+[codecarbon WARNING @ 19:14:17] Multiple instances of codecarbon are allowed to run at the same time.
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:14:17] Error running `scontrol show job $SLURM_JOB_ID` to count SLURM-available cpus. Using the machine's cpu count.
+[codecarbon INFO @ 19:14:17] [setup] RAM Tracking...
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:14:17] Error running `scontrol show job $SLURM_JOB_ID` to retrieve SLURM-available RAM.Using the machine's total RAM.
+[codecarbon INFO @ 19:14:17] [setup] CPU Tracking...
+[codecarbon WARNING @ 19:14:18] No CPU tracking mode found. Falling back on estimation based on TDP for CPU. 
+ Linux OS detected: Please ensure RAPL files exist, and are readable, at /sys/class/powercap/intel-rapl/subsystem to measure CPU
+
+[codecarbon INFO @ 19:14:18] CPU Model on constant consumption mode: AMD EPYC 7302 16-Core Processor
+[codecarbon WARNING @ 19:14:18] No CPU tracking mode found. Falling back on CPU load mode.
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:14:18] Error running `scontrol show job $SLURM_JOB_ID` to count SLURM-available cpus. Using the machine's cpu count.
+[codecarbon INFO @ 19:14:18] [setup] GPU Tracking...
+[codecarbon INFO @ 19:14:18] Tracking Nvidia GPU via pynvml
+[codecarbon INFO @ 19:14:18] The below tracking methods have been set up:
+                RAM Tracking Method: RAM power estimation model
+                CPU Tracking Method: cpu_load
+                GPU Tracking Method: pynvml
+            
+[codecarbon INFO @ 19:14:18] >>> Tracker's metadata:
+[codecarbon INFO @ 19:14:18]   Platform system: Linux-3.10.0-1160.6.1.el7.x86_64-x86_64-with-glibc2.35
+[codecarbon INFO @ 19:14:18]   Python version: 3.10.12
+[codecarbon INFO @ 19:14:18]   CodeCarbon version: 3.1.1
+[codecarbon INFO @ 19:14:18]   Available RAM : 1007.782 GB
+[codecarbon INFO @ 19:14:18]   CPU count: 32 thread(s) in 2 physical CPU(s)
+[codecarbon INFO @ 19:14:18]   CPU model: AMD EPYC 7302 16-Core Processor
+[codecarbon INFO @ 19:14:18]   GPU count: 4
+[codecarbon INFO @ 19:14:18]   GPU model: 4 x NVIDIA A100-SXM4-40GB BUT only tracking these GPU ids : ['0', '1', '2', '3']
+[codecarbon INFO @ 19:14:21] Emissions data (if any) will be saved to file /bigdata/3dabc/MNCD/UCD_MNCDV3/emissions.csv
+Detected kernel version 3.10.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=EfficientNet_B4_Weights.IMAGENET1K_V1`. You can also use `weights=EfficientNet_B4_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+The implementation of Tiny_CD does not support multi-/ hyper-spectral change detection, please ensure the 'input_nc' is no more than 3.
+The model Tiny_CD contains a sigmoid activation at its end, the 'num_classes' has been set to the default value 1, please make sure using it for binary change detection.
+loading Tiny_CD
+Conv2d(3, 48, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+model loaded
+{'data_type': 'MNCDV3', 'dataset_name': 'MNCDV3', 'dataset_path': '/bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112', 'eval': {'batch_size': 32, 'evaluator': 'torchmetrics'}, 'input_nc': 9, 'model_name': 'Tiny_CD', 'num_classes': 2, 'push_to_hub': False, 'test': {'batch_size': 32, 'save_path': './results/'}, 'train': {'batch_size': 16, 'epochs': 50, 'loss': 'BCE', 'lr': 0.00356799066427741, 'optim': 'AdamW', 'save_intervals': 1, 'snapshots_dir': './checkpoints/', 'weight_decay': 0.009449677083344786}}
+Loading weights from local directory
+model loaded
+testing:
+Data Transformation: [ToTensor()]
+{'data_type': 'MNCDV3', 'dataset_name': 'MNCDV3', 'dataset_path': '/bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112', 'eval': {'batch_size': 32, 'evaluator': 'torchmetrics'}, 'input_nc': 9, 'model_name': 'Tiny_CD', 'num_classes': 2, 'push_to_hub': False, 'test': {'batch_size': 16, 'save_path': './results/'}, 'train': {'batch_size': 16, 'epochs': 50, 'loss': 'BCE', 'lr': 0.00356799066427741, 'optim': 'AdamW', 'save_intervals': 1, 'snapshots_dir': './checkpoints/', 'weight_decay': 0.009449677083344786}}
+Building dataloader from /bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112
+dataset type is: MNCDV3
+Number of testing samples: 699
+  0%|          | 0/44 [00:00<?, ?it/s] 45%|████▌     | 20/44 [00:02<00:02,  8.64it/s] 91%|█████████ | 40/44 [00:04<00:00,  9.77it/s]100%|██████████| 44/44 [00:04<00:00,  9.74it/s]
+[codecarbon INFO @ 19:14:29] 
+Graceful stopping: collecting and writing information.
+Please wait a few seconds...
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:14:29] Error running `scontrol show job $SLURM_JOB_ID` to retrieve SLURM-available RAM.Using the machine's total RAM.
+[codecarbon INFO @ 19:14:29] Energy consumed for RAM : 0.000139 kWh. RAM Power : 70.0 W
+[codecarbon INFO @ 19:14:29] Delta energy consumed for CPU with cpu_load : 0.000062 kWh, power : 31.18961916142857 W
+[codecarbon INFO @ 19:14:29] Energy consumed for All CPU : 0.000062 kWh
+[codecarbon INFO @ 19:14:29] Energy consumed for all GPUs : 0.000465 kWh. Total GPU Power : 218.06498560556548 W
+[codecarbon INFO @ 19:14:29] 0.000666 kWh of electricity and 0.000000 L of water were used since the beginning.
+[codecarbon WARNING @ 19:14:29] The CSV format has changed, backing up old emission file.
+[codecarbon INFO @ 19:14:29] Done!
+
+1255975 511145 33264897 41007
+Model_Tested=Tiny_CD, Accuracy=0.05038, Precision=0.03638, Recall=0.9684, cF1=0.07013, ciou=0.03634

@@ -3,7 +3,9 @@ import model
 import yaml
 from utils import argparser
 from transformers import AutoConfig
+from codecarbon import track_emissions
 
+@track_emissions(allow_multiple_runs=True)
 def main(args):
 
     dataset=None

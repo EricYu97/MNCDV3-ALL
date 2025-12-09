@@ -358,9 +358,9 @@ class Change_Detection_Framework(nn.Module, PyTorchModelHubMixin):
                     for i in range(prediction.shape[0]):
                         # self.metrics.add_batch(references=label_tensor[i].flatten(),predictions=prediction[i].flatten())
                         # self.mean_iou.add_batch(references=[label_tensor[i]],predictions=[prediction[i]])
-                        
-                        # save_image(prediction[i,:,:].float().cpu(), os.path.join(save_path, fname[i]))
                         pass
+                        # save_image(prediction[i,:,:].float().cpu(), os.path.join(save_path, fname[i]))
+                        # pass
                         # print(f'saving images {os.path.join(self.configs["test"]["save_path"], fname[i])}')
         if self.configs["num_classes"]>2:
             final_f1=self.f1.compute()
@@ -376,7 +376,7 @@ class Change_Detection_Framework(nn.Module, PyTorchModelHubMixin):
             ts_metrics_list=torch.FloatTensor([OA,f1,precision,recall,ciou]).cuda().unsqueeze(0)
             ts_eval_metric_gathered=self.accelerator.gather(ts_metrics_list)
             final_metric=torch.mean(ts_eval_metric_gathered, dim=0)
-            self.accelerator.print(f'Accuracy={final_metric[0]:.04}, Precision={final_metric[2]:.04}, Recall={final_metric[3]:.04}, mF1={final_metric[1]:.04}, ciou={final_metric[4]:.04}')
+            self.accelerator.print(f'Model_Tested={self.configs["model_name"]}, Accuracy={final_metric[0]:.04}, Precision={final_metric[2]:.04}, Recall={final_metric[3]:.04}, cF1={final_metric[1]:.04}, ciou={final_metric[4]:.04}')
         # eval_metric=self.metrics.compute()
         # mean_iou=self.mean_iou.compute(num_labels=self.configs["num_classes"],ignore_index=255)
         # self.accelerator.print(eval_metric)

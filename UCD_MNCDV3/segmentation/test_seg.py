@@ -20,11 +20,13 @@ import argparse
 # from torcheval.metrics.functional import multiclass_f1_score, multiclass_accuracy, multiclass_recall, multiclass_precision, binary_accuracy, binary_f1_score, binary_recall, binary_precision
 # from torcheval.metrics import MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassF1Score
 # from torcheval.metrics.toolkit import sync_and_compute
-from dataset import Multitemporal_Semantic_Segmentation_Dataset 
+from dataset_MNCDV3_Seg import MNCDV3_Dataset
 # import evaluate
 from functools import partial
 
 from transformers import ResNetBackbone, ResNetConfig
+
+from vit_adapter.upernet import UperNet_Vit
 
 from torchmetrics import F1Score
 from transformers import UperNetForSemanticSegmentation, UperNetConfig, MobileNetV2ForSemanticSegmentation, MobileNetV2Config, Mask2FormerForUniversalSegmentation, MobileViTV2ForSemanticSegmentation, MobileViTV2Config, ViTConfig, Mask2FormerConfig, Mask2FormerImageProcessor, MobileViTForSemanticSegmentation, MobileViTConfig, SegformerConfig, SegformerForSemanticSegmentation, OneFormerConfig, OneFormerForUniversalSegmentation
@@ -68,9 +70,9 @@ def main(args):
     device=accelerator.device
     # batch_size=16
 
-    train_dataset=Multitemporal_Semantic_Segmentation_Dataset(dataset_root=args.dataset_root, mode="train", year_range=range(2015,2025))
-    val_dataset=Multitemporal_Semantic_Segmentation_Dataset(dataset_root=args.dataset_root, mode="val")
-    test_dataset=Multitemporal_Semantic_Segmentation_Dataset(dataset_root=args.dataset_root, mode="test")
+    train_dataset=MNCDV3_Dataset(dataset_root=args.dataset_root, mode="train", filter_empty=False, normalization=True)
+    val_dataset=MNCDV3_Dataset(dataset_root=args.dataset_root, mode="val", normalization=True)
+    test_dataset=MNCDV3_Dataset(dataset_root=args.dataset_root, mode="test", normalization=True)
     test_dataloader = data.DataLoader(test_dataset, batch_size=batch_size//2, shuffle=False, num_workers=8, collate_fn=None)
     collate_func = None
 
@@ -96,26 +98,29 @@ def main(args):
         model=SegformerForSemanticSegmentation.from_pretrained(args.model_path)
         model_type="huggingface"
     elif args.model=="UNet":
-        model=unet(n_channels=args.num_channels, n_classes=2)
+        model=unet(n_channels=args.num_channels, n_classes=6)
         model_type="standalone"
     elif args.model=="pspnet":
-        model=pspnet(n_channels=args.num_channels, n_classes=2, input_size=(args.img_size, args.img_size))
+        model=pspnet(n_channels=args.num_channels, n_classes=6, input_size=(args.img_size, args.img_size))
         model_type="standalone"
     elif args.model=="linknet":
-        model=linknet(n_channels=args.num_channels, n_classes=2)
+        model=linknet(n_channels=args.num_channels, n_classes=6)
         model_type="standalone"
     elif args.model=="icnet":
-        model=icnet(n_channels=args.num_channels, n_classes=2, input_size=(args.img_size, args.img_size))
+        model=icnet(n_channels=args.num_channels, n_classes=6, input_size=(args.img_size, args.img_size))
         model_type="standalone"
     elif args.model=="sqnet":
-        model=sqnet(n_channels=args.num_channels, n_classes=2)
+        model=sqnet(n_channels=args.num_channels, n_classes=6)
         model_type="standalone"
     elif args.model=="deeplabv3_plus":
-        model=deeplabv3_plus(nInputChannels=args.num_channels, n_classes=2)
+        model=deeplabv3_plus(nInputChannels=args.num_channels, n_classes=6)
+        model_type="standalone"
+    elif args.model=="UperNet_ViT":
+        model=UperNet_Vit()
         model_type="standalone"
 
     if model_type=="standalone":
-        print(model)
+        # print(model)
         pretrained_weights = torch.load(args.model_path+"/pytorch_model.bin", map_location='cpu')
         model.load_state_dict(pretrained_weights)
 
@@ -136,7 +141,8 @@ def main(args):
 
         # Forward pass
         
-            images, labels, domain, year, patch_num =batch["images"], batch["labels"], batch["domain"], batch["year"], batch["patch_num"]
+            # images, labels, domain, year, patch_num =batch["images"], batch["labels"], batch["domain"], batch["year"], batch["patch_num"]
+            images, labels=batch["images"], batch["labels"]
 
             outputs = model(images)
 
@@ -147,7 +153,7 @@ def main(args):
                 outputs = processor.post_process_semantic_segmentation(outputs, target_sizes=[(args.img_size,args.img_size) for i in range(batch_size//2)])
                 outputs = torch.stack(outputs, dim=0)
             else:
-                if model_type=="huggingface":
+                if model_type=="huggingface" or args.model=="UperNet_ViT":
                     outputs = outputs.logits
                 elif model_type=="standalone":
                     _, outputs = outputs
@@ -159,28 +165,24 @@ def main(args):
                 probs_calc, label_calc=outputs.squeeze(), labels
             else:
                 probs_calc, label_calc=torch.argmax(outputs, dim=1), labels
-            tp,fp,tn,fn=confusion(probs_calc,label_calc)
-            assert tp+fp+tn+fn==probs_calc.shape.numel()
-            TP+=tp
-            TN+=tn
-            FP+=fp
-            FN+=fn
 
-            for i in range(probs_calc.shape[0]):
-                save_path = os.path.join(args.save_path, args.model, domain[i], str(year[i].item()))
-                os.makedirs(save_path, exist_ok=True)
-                save_image(probs_calc[i,:,:].float().cpu(), os.path.join(save_path, patch_num[i]+".png"))
+            if args.model=="Mask2Former":
+                probs_calc, label_calc=outputs.permute(1,2,0).flatten(0), labels.permute(1,2,0).flatten(0)
+                b_f1.update(probs_calc, label_calc)
+            else:
+                probs_calc, label_calc=outputs.permute(1,2,3,0).flatten(1), labels.permute(1,2,0).flatten(0)
+                b_f1.update(torch.argmax(probs_calc, dim=0), label_calc)
 
-    OA=(TP+TN)/(TP+TN+FP+FN)
-    precision=TP/(TP+FP)
-    recall=TP/(TP+FN)
-    f1=2*TP/(2*TP+FP+FN)
-    ciou=TP/(TP+FP+FN)
-    f1_each_device=f1
-    ts_metrics_list=torch.FloatTensor([OA,f1,precision,recall,ciou]).cuda().unsqueeze(0)
-    ts_eval_metric_gathered=accelerator.gather(ts_metrics_list)
-    final_metric=torch.mean(ts_eval_metric_gathered, dim=0)
-    accelerator.print(f'Accuracy={final_metric[0]:.04}, Precision={final_metric[2]:.04}, Recall={final_metric[3]:.04}, mF1={final_metric[1]:.04}, ciou={final_metric[4]:.04}')
+            # for i in range(probs_calc.shape[0]):
+            #     save_path = os.path.join(args.save_path, args.model, domain[i], str(year[i].item()))
+            #     os.makedirs(save_path, exist_ok=True)
+            #     save_image(probs_calc[i,:,:].float().cpu(), os.path.join(save_path, patch_num[i]+".png"))
+
+    seg_f1=b_f1.compute()
+    avg_seg_f1=sum(seg_f1)/len(seg_f1)
+
+    accelerator.print(f'Results: Model_Tested: {args.model}, Multi-class F1 Score: {seg_f1}, Average F1 Score: {avg_seg_f1}')
+    # accelerator.print(f'Accuracy={final_metric[0]:.04}, Precision={final_metric[2]:.04}, Recall={final_metric[3]:.04}, mF1={final_metric[1]:.04}, ciou={final_metric[4]:.04}')
 
     # if args.push_to_hub:
     #     push_to_hub_path=f"MNCDV2_Prompted_Pretrained"
@@ -197,7 +199,7 @@ def args():
     parser.add_argument('--save-path', type=str, default="./results", help='path to save the results')
     parser.add_argument('--num-classes-seg', type=int, default=2)
 
-    parser.add_argument('--model', type=str, default="UperNet_ConvNext", choices=["UperNet_ConvNext", "UperNet_SwinT", "MobileNetV2_DeeplabV3P", "MobileViTV2_DeeplabV3", "Mask2Former", "Segformer", "UNet", "pspnet", "linknet", "icnet", "sqnet", "deeplabv3_plus"], help='model type')
+    parser.add_argument('--model', type=str, default="UperNet_ConvNext", choices=["UperNet_ViT", "UperNet_ConvNext", "UperNet_SwinT", "MobileNetV2_DeeplabV3P", "MobileViTV2_DeeplabV3", "Mask2Former", "Segformer", "UNet", "pspnet", "linknet", "icnet", "sqnet", "deeplabv3_plus"], help='model type')
     parser.add_argument('--model-path', type=str, default="./pretrained_models/UperNet_ConvNext", help='path to the pretrained model')
 
     args = parser.parse_args()

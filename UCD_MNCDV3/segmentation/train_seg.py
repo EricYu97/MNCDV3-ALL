@@ -32,6 +32,7 @@ from torchmetrics import F1Score
 from transformers import UperNetForSemanticSegmentation, UperNetConfig, MobileNetV2ForSemanticSegmentation, MobileNetV2Config, Mask2FormerForUniversalSegmentation, MobileViTV2ForSemanticSegmentation, MobileViTV2Config, ViTConfig, Mask2FormerConfig, Mask2FormerImageProcessor, MobileViTForSemanticSegmentation, MobileViTConfig, SegformerConfig, SegformerForSemanticSegmentation, OneFormerConfig, OneFormerForUniversalSegmentation
 from standalone_models import unet, pspnet, linknet, icnet, sqnet, deeplabv3_plus
 from codecarbon import track_emissions
+from vit_adapter.upernet import UperNet_Vit
 
 ADE_MEAN = np.array([123.675, 116.280, 103.530]) / 255
 ADE_STD = np.array([58.395, 57.120, 57.375]) / 255
@@ -82,6 +83,9 @@ def main(args):
         config.backbone_config.image_size = args.img_size
         model=UperNetForSemanticSegmentation.from_pretrained("openmmlab/upernet-convnext-base", config=config, ignore_mismatched_sizes=True)
         model_type="huggingface"
+    elif args.model=="UperNet_ViT":
+        model=UperNet_Vit()
+        model_type="standalone"
     elif args.model=="UperNet_SwinT":
         config = UperNetConfig.from_pretrained("openmmlab/upernet-swin-base", num_labels=args.num_classes_seg, ignore_mismatched_sizes=True)
         config.backbone_config.num_channels = args.num_channels
@@ -137,7 +141,8 @@ def main(args):
     loss_fct=torch.nn.CrossEntropyLoss(ignore_index=-1, reduction="mean")
 
     train_dataloader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=collate_func)
-    val_dataloader = data.DataLoader(val_dataset, batch_size=batch_size//2, shuffle=False, num_workers=8, collate_fn=None)
+    val_dataloader = data.DataLoader(test_dataset, batch_size=batch_size//2, shuffle=False, num_workers=8, collate_fn=None)
+    # val_dataloader = data.DataLoader(val_dataset, batch_size=batch_size//2, shuffle=False, num_workers=8, collate_fn=None)
 
     print("Training Samples", len(train_dataset), "Validation Samples", len(val_dataset), "batch size:", batch_size)
 
@@ -169,7 +174,7 @@ def main(args):
 
             # print(images, labels)
             # Backward propagation
-            if model_type=="huggingface":
+            if model_type=="huggingface" or args.model=="UperNet_ViT":
                 if not args.model=="Mask2Former":
                     outputs = model(images, labels=labels.long())
                 else:
@@ -231,7 +236,7 @@ def main(args):
                         outputs = processor.post_process_semantic_segmentation(outputs, target_sizes=[(args.img_size,args.img_size) for i in range(batch_size//2)])
                         outputs = torch.stack(outputs, dim=0)
                     else:
-                        if model_type=="huggingface":
+                        if model_type=="huggingface" or args.model=="UperNet_ViT":
                             outputs = outputs.logits
                         elif model_type=="standalone":
                             _, outputs = outputs
@@ -264,7 +269,7 @@ def main(args):
                         torch.save(accelerator.unwrap_model(model).state_dict(), save_pretrained_path+"/pytorch_model.bin")
 
             # print(f"Evaluation for Epoch {epoch} Completed, Seg_F1: {Seg_F1}, Seg_Acc: {Seg_Acc}, Seg_Pre: {Seg_Pre}, Seg_Rec: {Seg_Rec}, CD_F1: {CD_F1}, CD_Acc: {CD_Acc}, CD_Pre: {CD_Pre}, CD_Rec: {CD_Rec}")
-            accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_F1: {seg_f1}")
+            accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_F1: {seg_f1}, Averaged_Current_Seg_F1:", {sum(seg_f1)/len(seg_f1)})
  
             accelerator.print(f'Current Best Seg F1 Score: {Best_Seg_F1}')
 
@@ -295,7 +300,7 @@ def args():
     parser.add_argument('--dataset-root', type=str, default="/home/eric/dataset/MineNetCDV2_Cropped128_Step64")
     parser.add_argument('--save-suffix', type=str, default="Temporal_Mixed_Prompted_2_2_Focal_Diff", help='suffix for saving the model')
 
-    parser.add_argument('--model', type=str, default="UperNet_ConvNext", choices=["UperNet_ConvNext", "UperNet_SwinT", "MobileNetV2_DeeplabV3P", "MobileViTV2_DeeplabV3", "Mask2Former", "Segformer", "UNet", "pspnet", "linknet", "icnet", "sqnet", "deeplabv3_plus"], help='model type')
+    parser.add_argument('--model', type=str, default="UperNet_ConvNext", choices=["UperNet_ViT","UperNet_ConvNext", "UperNet_SwinT", "MobileNetV2_DeeplabV3P", "MobileViTV2_DeeplabV3", "Mask2Former", "Segformer", "UNet", "pspnet", "linknet", "icnet", "sqnet", "deeplabv3_plus"], help='model type')
 
     args = parser.parse_args()
     return args

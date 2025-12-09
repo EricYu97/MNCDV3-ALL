@@ -1,0 +1,71 @@
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/usr/local/lib/python3.10/dist-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=VGG16_Weights.IMAGENET1K_V1`. You can also use `weights=VGG16_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+[codecarbon WARNING @ 19:05:10] Multiple instances of codecarbon are allowed to run at the same time.
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:05:10] Error running `scontrol show job $SLURM_JOB_ID` to count SLURM-available cpus. Using the machine's cpu count.
+[codecarbon INFO @ 19:05:10] [setup] RAM Tracking...
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:05:10] Error running `scontrol show job $SLURM_JOB_ID` to retrieve SLURM-available RAM.Using the machine's total RAM.
+[codecarbon INFO @ 19:05:10] [setup] CPU Tracking...
+[codecarbon WARNING @ 19:05:11] No CPU tracking mode found. Falling back on estimation based on TDP for CPU. 
+ Linux OS detected: Please ensure RAPL files exist, and are readable, at /sys/class/powercap/intel-rapl/subsystem to measure CPU
+
+[codecarbon INFO @ 19:05:11] CPU Model on constant consumption mode: AMD EPYC 7302 16-Core Processor
+[codecarbon WARNING @ 19:05:11] No CPU tracking mode found. Falling back on CPU load mode.
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:05:11] Error running `scontrol show job $SLURM_JOB_ID` to count SLURM-available cpus. Using the machine's cpu count.
+[codecarbon INFO @ 19:05:11] [setup] GPU Tracking...
+[codecarbon INFO @ 19:05:11] Tracking Nvidia GPU via pynvml
+[codecarbon INFO @ 19:05:12] The below tracking methods have been set up:
+                RAM Tracking Method: RAM power estimation model
+                CPU Tracking Method: cpu_load
+                GPU Tracking Method: pynvml
+            
+[codecarbon INFO @ 19:05:12] >>> Tracker's metadata:
+[codecarbon INFO @ 19:05:12]   Platform system: Linux-3.10.0-1160.6.1.el7.x86_64-x86_64-with-glibc2.35
+[codecarbon INFO @ 19:05:12]   Python version: 3.10.12
+[codecarbon INFO @ 19:05:12]   CodeCarbon version: 3.1.1
+[codecarbon INFO @ 19:05:12]   Available RAM : 1007.782 GB
+[codecarbon INFO @ 19:05:12]   CPU count: 32 thread(s) in 2 physical CPU(s)
+[codecarbon INFO @ 19:05:12]   CPU model: AMD EPYC 7302 16-Core Processor
+[codecarbon INFO @ 19:05:12]   GPU count: 4
+[codecarbon INFO @ 19:05:12]   GPU model: 4 x NVIDIA A100-SXM4-40GB BUT only tracking these GPU ids : ['0', '1', '2', '3']
+[codecarbon INFO @ 19:05:15] Emissions data (if any) will be saved to file /bigdata/3dabc/MNCD/UCD_MNCDV3/emissions.csv
+Detected kernel version 3.10.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+loading BIT
+BIT input_channels: 9
+model loaded
+{'data_type': 'MNCDV3', 'dataset_name': 'MNCDV3', 'dataset_path': '/bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112', 'eval': {'batch_size': 32, 'evaluator': 'torchmetrics'}, 'input_nc': 9, 'model_name': 'BIT', 'num_classes': 2, 'push_to_hub': False, 'test': {'batch_size': 32, 'save_path': './results/'}, 'train': {'batch_size': 16, 'epochs': 50, 'loss': 'CrossEntropy', 'lr': 0.0001, 'optim': 'Adam', 'save_intervals': 1, 'snapshots_dir': './checkpoints/'}}
+Loading weights from local directory
+model loaded
+testing:
+Data Transformation: [ToTensor()]
+{'data_type': 'MNCDV3', 'dataset_name': 'MNCDV3', 'dataset_path': '/bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112', 'eval': {'batch_size': 32, 'evaluator': 'torchmetrics'}, 'input_nc': 9, 'model_name': 'BIT', 'num_classes': 2, 'push_to_hub': False, 'test': {'batch_size': 16, 'save_path': './results/'}, 'train': {'batch_size': 16, 'epochs': 50, 'loss': 'CrossEntropy', 'lr': 0.0001, 'optim': 'Adam', 'save_intervals': 1, 'snapshots_dir': './checkpoints/'}}
+Building dataloader from /bigdata/3dabc/MNCD/MNCDV3_Bitemporal_Cropped_Size224_Step112
+dataset type is: MNCDV3
+Number of testing samples: 699
+  0%|          | 0/44 [00:00<?, ?it/s]  0%|          | 0/44 [00:00<?, ?it/s]
+[codecarbon INFO @ 19:05:17] 
+Graceful stopping: collecting and writing information.
+Please wait a few seconds...
+/bin/dash: 1: scontrol: not found
+[codecarbon WARNING @ 19:05:17] Error running `scontrol show job $SLURM_JOB_ID` to retrieve SLURM-available RAM.Using the machine's total RAM.
+[codecarbon INFO @ 19:05:17] Energy consumed for RAM : 0.000047 kWh. RAM Power : 70.0 W
+[codecarbon INFO @ 19:05:18] Delta energy consumed for CPU with cpu_load : 0.000021 kWh, power : 31.028650510000002 W
+[codecarbon INFO @ 19:05:18] Energy consumed for All CPU : 0.000021 kWh
+[codecarbon INFO @ 19:05:18] Energy consumed for all GPUs : 0.000146 kWh. Total GPU Power : 180.31935699571855 W
+[codecarbon INFO @ 19:05:18] 0.000214 kWh of electricity and 0.000000 L of water were used since the beginning.
+[codecarbon INFO @ 19:05:18] Done!
+
+Traceback (most recent call last):
+  File "/bigdata/3dabc/MNCD/UCD_MNCDV3/test.py", line 65, in <module>
+    main(args)
+  File "/usr/local/lib/python3.10/dist-packages/codecarbon/emissions_tracker.py", line 1317, in wrapped_fn
+    fn_result = fn(*args, **kwargs)
+  File "/bigdata/3dabc/MNCD/UCD_MNCDV3/test.py", line 43, in main
+    CD_framework.testing_CD()
+  File "/bigdata/3dabc/MNCD/UCD_MNCDV3/model.py", line 362, in testing_CD
+    save_image(prediction[i,:,:].float().cpu(), os.path.join(save_path, fname[i]))
+IndexError: list index out of range
