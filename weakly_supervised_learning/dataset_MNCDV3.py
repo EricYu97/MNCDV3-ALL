@@ -367,7 +367,7 @@ class MNCDV3_WSSCD_Dataset(torch.utils.data.Dataset):
         post_label = self.rgb_to_label(post_label, self.palette)
 
         # Pixel-wise change mask (H, W) with values 0/1
-        change_mask = (pre_label != post_label).astype(np.uint8)
+        change_mask = torch.from_numpy((pre_label != post_label).astype(np.uint8))
 
         # Image-wise weak label: 1 if any pixel changed, else 0
         image_label = int(change_mask.sum() > 0)
