@@ -514,10 +514,85 @@ class WS_MaskCDLoss(nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
+        self.eps=1e-6
         self.k=k
+        self.change_class_idx = 0
+        self.dynamic_k = True
+        self.dynamic_alpha = 0.3
+        self.entropy_w = 0.1
+        self.rank_w = 1.0
+        self.attn_w = 0.1
+        self.mask_cons_w = 0.5
+        self.mil_w = 1.0
+        self.margin = 0.2
+
+    def _choose_k(self, p: torch.Tensor) -> int:
+        """
+        动态 K 计算：基于预测的确定性。
+        如果模型很确信（p接近0或1），H低，Conf高 -> k 变大（相信更多Query）。
+        如果模型很犹豫（p接近0.5），H高，Conf低 -> k 变小（只取最可信的）。
+        """
+        # p: [N]
+        # 先计算 query-level熵，再基于平均 confidence 估计 k
+        with torch.no_grad(): # 计算 k 不需要梯度
+            H = - (p * torch.log(p + self.eps) + (1 - p) * torch.log(1 - p + self.eps))
+            conf = (1.0 - H / 0.693).mean().clamp(0.0, 1.0).item() # 除以ln(2)归一化
+            
+            # 基础 k + 动态部分
+            base_k = int(p.numel() * 0.05) # 假设至少 5% 是前景
+            dynamic_part = int(conf * p.numel() * self.dynamic_alpha)
+            k = max(self.min_k, base_k + dynamic_part)
+            return k
+    
+    def _ranking_loss_per_sample(self, p: torch.Tensor, k: int, label: int) -> torch.Tensor:
+        # p: [N]
+        N = p.numel()
+        # bottom-k: smallest k
+        if k >= N:
+            return torch.tensor(0.0, device=p.device)
+        topk, _ = torch.topk(p, k)
+        bottomk, _ = torch.topk(-p, k)
+        bottomk = -bottomk
+        diff = topk.mean() - bottomk.mean()
+        if label == 1:
+            # positive: top should be larger than bottom -> margin satisfied if diff > margin
+            loss = F.relu(self.margin - diff)
+        else:
+            # negative: top should be smaller than bottom -> we want diff < -margin
+            loss = F.relu(self.margin + diff)
+        return loss
 
 
-    def loss_ws_cd(self, class_queries_logits: Tensor, change_labels: list[Tensor] 
+    def _mask_regularization_loss(self, mask_logits: torch.Tensor, p: torch.Tensor, k: int, label: int):
+        """
+        mask_logits: [N, H, W]
+        p: [N] change probabilities
+        k: top-k
+        """
+
+        N, H, W = mask_logits.shape
+
+        masks = torch.sigmoid(mask_logits)
+
+        topk_vals, topk_idx = torch.topk(p, k)
+        selected_masks = masks[topk_idx]  # [k, H, W]
+
+        if label == 1:
+            # 正样本：希望 Mask 内部也是集中的 (Compactness)
+            # 把 Mask 视为一个分布来算熵
+            # Normalize to sum to 1
+            m_flat = selected_masks.view(k, -1)
+            m_sum = m_flat.sum(dim=1, keepdim=True).clamp(min=self.eps)
+            m_norm = m_flat / m_sum
+            
+            entropy = - (m_norm * torch.log(m_norm + self.eps)).sum(dim=1)
+            return entropy.mean()
+        else:
+            # 负样本：【修改】全图抑制 (Sparsity Loss)
+            # 我们希望选出来的 Top-k Mask 也是全黑的
+            return selected_masks.mean()
+
+    def loss_ws_cd(self, class_queries_logits: Tensor, change_labels: list[Tensor], attention_maps=None, mask_queries_logits=None
     ) -> dict[str, Tensor]:
 
         pred_logits = class_queries_logits
@@ -529,52 +604,117 @@ class WS_MaskCDLoss(nn.Module):
         B, N = change_probs.shape
         loss = 0.0
 
+        loss_mil = 0.0
+        loss_ent = 0.0
+        loss_rank = 0.0
+        loss_attn = 0.0
+        loss_mask_cons = 0.0
+
+
         for i in range(B):
             # 获取当前图的 N 个 Query 的“变化概率”
             p = change_probs[i] # [N]
+            label = int(change_labels[i].item())
+
+            # Adaptive K
+            k = self._choose_k(p) if self.dynamic_k else self.k
+            k = max(1, min(k, N))
             
-            if change_labels[i] == 1:
-                # --- 正样本 (Image is Change) ---
-                # 要求：Top-k 的 Query 概率越接近 1 越好
-                # 使用 Negative Log Likelihood: -log(p)
-                
-                topk_probs, _ = torch.topk(p, k=self.k)
-                
-                # 加上一个小 epsilon 防止 log(0)
-                l = -torch.log(topk_probs + 1e-6).mean()
-                loss += l
-                
+            # Falling back to normal mode first
+            # k=self.k
+
+            # MIL top-k losses
+            topk_vals, _ = torch.topk(p, k=k)
+
+            if label == 1:
+                # positive image -> encourage topk -> 1
+                # use numerically stable variant
+                mil_loss_i = -torch.log(topk_vals.clamp(min=self.eps, max=1.0 - self.eps)).mean()
+
             else:
-                # --- 负样本 (Image is No Change) ---
-                # 要求：Top-k (最像变化的那些) 的概率越接近 0 越好
-                # 也就是 maximize (1-p) -> minimize -log(1-p)
-                
-                # 选出分值最高的 k 个“误报”Query
-                topk_probs, _ = torch.topk(p, k=self.k)
-                
-                l = -torch.log(1 - topk_probs + 1e-6).mean()
-                loss += l
+                # negative image -> discourage topk -> 0
+                mil_loss_i = -torch.log((1.0 - topk_vals).clamp(min=self.eps, max=1.0 - self.eps)).mean()
+            loss_mil = loss_mil + mil_loss_i
+
+            # Entropy regularization (all queries)
+            ent = -(p * torch.log(p + self.eps) + (1 - p) * torch.log(1 - p + self.eps))
+            loss_ent = loss_ent + ent.mean()
+
+            # Ranking loss: top-k vs bottom-k
+            rank_loss_i = self._ranking_loss_per_sample(p, k, label)
+            loss_rank = loss_rank + rank_loss_i
+
+            # Attention entropy loss (if attn provided)
+            if attention_maps is not None:
+                attn = attention_maps[i] # [N, H, W]
+                attn_loss_i = self._attention_entropy_loss(attn, p, k, label)
+                loss_attn = loss_attn + attn_loss_i
+
+
+            # Mask consistency (if masks provided)
+            if mask_queries_logits is not None:
+                mask_logits = mask_queries_logits[i]  # [N, H, W]
+                mask_loss_i = self._mask_regularization_loss(mask_logits, p, k, label)
+                loss_mask_cons += mask_loss_i
         
-        loss = loss / B 
-        return {"loss_ws_cd": loss}
+        # average over batch
+        loss_mil = loss_mil / B
+        loss_ent = loss_ent / B
+        loss_rank = loss_rank / B
+        loss_attn = loss_attn / B if attention_maps is not None else torch.tensor(0.0, device=class_queries_logits.device)
+        loss_mask_cons = loss_mask_cons / B if mask_queries_logits is not None else torch.tensor(0.0, device=class_queries_logits.device)
+
+        return {
+        "loss_mil": loss_mil,
+        "loss_entropy_reg": loss_ent,
+        "loss_ranking": loss_rank,
+        "loss_attention": loss_attn,
+        "loss_mask_consistency": loss_mask_cons,
+        }
+            # if change_labels[i] == 1:
+            #     # --- 正样本 (Image is Change) ---
+            #     # 要求：Top-k 的 Query 概率越接近 1 越好
+            #     # 使用 Negative Log Likelihood: -log(p)
+                
+            #     topk_probs, _ = torch.topk(p, k=self.k)
+                
+            #     # 加上一个小 epsilon 防止 log(0)
+            #     l = -torch.log(topk_probs + 1e-6).mean()
+            #     loss += l
+                
+            # else:
+            #     # --- 负样本 (Image is No Change) ---
+            #     # 要求：Top-k (最像变化的那些) 的概率越接近 0 越好
+            #     # 也就是 maximize (1-p) -> minimize -log(1-p)
+                
+            #     # 选出分值最高的 k 个“误报”Query
+            #     topk_probs, _ = torch.topk(p, k=self.k)
+                
+            #     l = -torch.log(1 - topk_probs + 1e-6).mean()
+            #     loss += l
+        
+        # loss = loss / B 
+        # return {"loss_ws_cd": loss}
 
     def forward(
         self,
         class_queries_logits: torch.Tensor,
         change_labels: list[torch.Tensor],
+        mask_queries_logits: Optional[torch.Tensor] = None,
         auxiliary_predictions: Optional[dict[str, torch.Tensor]] = None,
     ) -> dict[str, torch.Tensor]:
 
         # get all the losses
 
         losses: dict[str, Tensor] = {
-            **self.loss_ws_cd(class_queries_logits, change_labels),
+            **self.loss_ws_cd(class_queries_logits, change_labels, mask_queries_logits=mask_queries_logits),
         }
         # in case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if auxiliary_predictions is not None:
             for idx, aux_outputs in enumerate(auxiliary_predictions):
                 class_queries_logits = aux_outputs["class_queries_logits"]
-                loss_dict = self.loss_ws_cd(class_queries_logits, change_labels)
+                mask_queries_logits = aux_outputs["masks_queries_logits"]
+                loss_dict = self.loss_ws_cd(class_queries_logits, change_labels, mask_queries_logits=mask_queries_logits)
                 # print(loss_dict)
                 loss_dict = {f"{key}_{idx}": value for key, value in loss_dict.items()}
                 losses.update(loss_dict)
@@ -2408,6 +2548,7 @@ class WS_MaskCDModel(Mask2FormerModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Mask2FormerModelOutput:
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2517,6 +2658,11 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
+            "loss_mil": 1.0,
+            "loss_entropy_reg": 0.05,
+            "loss_ranking": 2.0,
+            # "loss_attention": 0.1,
+            "loss_mask_consistency": 0.01,
         }
 
         self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
@@ -2568,6 +2714,7 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
         # print(loss_dict)
         for key, weight in self.weight_dict.items():
             for loss_key, loss in loss_dict.items():
+                # print(key,loss_key)
                 if key in loss_key:
                     loss *= weight
 
@@ -2575,6 +2722,14 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
 
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
+    
+    def apply_cd_loss_weights(self, loss_dict):
+        for key, weight in self.weight_dict.items():
+            for loss_key, loss in loss_dict.items():
+                if key in loss_key:
+                    loss *= weight
+
+        return loss_dict
 
     def get_auxiliary_logits(self, classes: torch.Tensor, output_masks: torch.Tensor):
         auxiliary_logits: list[dict[str, Tensor]] = []
@@ -2609,6 +2764,8 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
         weak_change_labels (`list[torch.Tensor]`, *optional*):
             List of image-wise change labels of shape `(num_labels)` to be fed to a model
         """
+        output_attentions=True
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2624,7 +2781,7 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
         )
 
         outputs_seg, outputs_cd = outputs["Seg_T1"], outputs["CD"]
-        # print(outputs_seg)
+        # for i in outputs_cd.attentions: print(i.shape)
 
         loss_seg, loss_dict_seg, auxiliary_logits_seg = None, None, None
         loss_cd, loss_dict_cd, auxiliary_logits_cd = None, None, None
@@ -2692,7 +2849,12 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
                 class_queries_logits=class_queries_logits_cd[-1],
                 change_labels=weak_change_labels,
                 auxiliary_predictions=auxiliary_logits_cd,
+                mask_queries_logits=masks_queries_logits_cd[-1],
             )
+
+            # print(loss_dict_cd)
+            loss_dict_cd = self.apply_cd_loss_weights(loss_dict_cd)
+            # print(loss_dict_cd)
             loss_cd = self.get_loss(loss_dict_cd)
 
         # print(loss_dict_cd)
@@ -2773,6 +2935,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
                     loss *= weight
 
         return loss_dict
+    
 
     def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
@@ -2943,6 +3106,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
                 class_labels=class_labels,
                 auxiliary_predictions=auxiliary_logits,
             )
+
             loss = self.get_loss(loss_dict)
 
         encoder_hidden_states = None

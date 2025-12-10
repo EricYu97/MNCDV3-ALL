@@ -150,7 +150,7 @@ def main(args):
             optimizer.step()
             scheduler.step()
             if (num_samples+1)%50==0 and accelerator.is_main_process:
-                tqdm.write("Epoch:", epoch, "Progress", f'{num_samples}/{len(train_dataloader)}', "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
+                accelerator.print("Epoch:", epoch, "Progress", f'{num_samples}/{len(train_dataloader)}', "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
 
         accelerator.print("Epoch:", epoch, "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
 
