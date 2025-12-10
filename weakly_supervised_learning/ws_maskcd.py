@@ -2506,6 +2506,10 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
     main_input_name = "pixel_values"
 
     def __init__(self, config: Mask2FormerConfig, topk=5):
+        r"""
+        topk:(`int`, *optional*):
+            the number k of topk values to be selected for wsscd
+        """
         super().__init__(config)
         self.model = WS_MaskCDModel(config)
 
@@ -2516,7 +2520,7 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
         }
 
         self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
-        self.class_predictor_cd = nn.Linear(config.hidden_dim, 1 + 1) # binary classification for change detection
+        self.class_predictor_cd = nn.Linear(config.hidden_dim, 1 + 1) # binary classification for change detection, 0 as changed (objective), 1 as no object
 
         self.criterion = Mask2FormerLoss(config=config, weight_dict=self.weight_dict)
         self.criterion_ws_cd = WS_MaskCDLoss(config=config, weight_dict=self.weight_dict, k=topk)
@@ -2675,7 +2679,7 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
 
         # For Change Detection Branch
         for decoder_output_cd in outputs_cd.transformer_decoder_intermediate_states:
-            class_prediction_cd = self.class_predictor(decoder_output_cd.transpose(0, 1))
+            class_prediction_cd = self.class_predictor_cd(decoder_output_cd.transpose(0, 1))
             class_queries_logits_cd += (class_prediction_cd,)
 
         masks_queries_logits_cd = outputs_cd.masks_queries_logits

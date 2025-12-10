@@ -21,7 +21,7 @@ from functools import partial
 
 from transformers import ResNetBackbone, ResNetConfig
 
-from torchmetrics import F1Score
+from torchmetrics import F1Score, Accuracy, Recall, Precision, JaccardIndex
 from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerImageProcessor
 from codecarbon import track_emissions
 
@@ -149,8 +149,8 @@ def main(args):
             # Optimization
             optimizer.step()
             scheduler.step()
-            if (num_samples+1)%50==0:
-                accelerator.print("Epoch:", epoch, "Progress", f'{num_samples}/{len(train_dataloader)}', "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
+            if (num_samples+1)%50==0 and accelerator.is_main_process:
+                tqdm.write("Epoch:", epoch, "Progress", f'{num_samples}/{len(train_dataloader)}', "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
 
         accelerator.print("Epoch:", epoch, "Seg_Loss:", running_loss_seg/num_samples, "CD_Loss:", running_loss_cd/num_samples)
 
@@ -160,6 +160,9 @@ def main(args):
             val_dataloader=accelerator.prepare(val_dataloader)
 
             b_f1=F1Score(task='multiclass', num_classes=2, average=None).to(accelerator.device)
+            b_recall=Recall(task='multiclass', num_classes=2, average=None).to(accelerator.device)
+            b_pre=Precision(task='multiclass', num_classes=2, average=None).to(accelerator.device)
+            b_iou = JaccardIndex(task='multiclass', num_classes=2, average=None).to(accelerator.device)    # 分割必备
 
             with torch.no_grad():
                 for idx, batch in enumerate(tqdm(val_dataloader,disable=not accelerator.is_local_main_process, miniters=50)):
@@ -167,21 +170,42 @@ def main(args):
 
                 # Forward pass
 
-                    images, labels=batch["images"]["pre"], batch["labels"]["change_mask"]
+                    images_pre, images_post, labels=batch["images"]["pre"], batch["images"]["post"], batch["labels"]["change_mask"]
 
-                    outputs_cd = model(images)["outputs_cd"]
 
-                    # print(outputs)
+                    pixel_values = torch.cat([images_pre, images_post], dim=0)
 
-                    processor=Mask2FormerImageProcessor(ignore_index=-1,reduce_labels=False, do_resize=False, do_rescale=False, do_normalize=False)
-                    outputs_cd = processor.post_process_semantic_segmentation(outputs_cd, target_sizes=[(args.img_size,args.img_size) for i in range(batch_size//2)])
-                    outputs_cd = torch.stack(outputs_cd, dim=0)
+                    outputs_cd = model(pixel_values)["outputs_cd"]
 
-                    probs_calc, label_calc=outputs.permute(1,2,0).flatten(0), labels.permute(1,2,0).flatten(0)
-                    b_f1.update(probs_calc, label_calc)
+                    class_queries_logits, masks_queries_logits = outputs_cd.class_queries_logits, outputs_cd.masks_queries_logits
+
+                    masks_queries_logits = torch.nn.functional.interpolate(
+                        masks_queries_logits, size=(224, 224), mode="bilinear", align_corners=False
+                    )
+
+                    masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+                    masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+                    segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+                    batch_size = class_queries_logits.shape[0]
+
+                    bg_score = 1.0 - segmentation
+                    segmentation = torch.cat([bg_score, segmentation], dim=1)
+
+
+                    semantic_segmentation = segmentation.argmax(dim=1)
+
+                    # print(semantic_segmentation.shape)
+
+                    # print(labels.shape)
+                    probs_calc, label_calc=semantic_segmentation.permute(1,2,0).flatten(0), labels.permute(1,2,0).flatten(0)
+                    b_f1.update(semantic_segmentation, labels)
+                    b_recall.update(semantic_segmentation, labels)
+                    b_pre.update(semantic_segmentation, labels)
+                    b_iou.update(semantic_segmentation, labels)
 
                 accelerator.print("All evaluation batches have been collected, calculating f1 scores.")
-                seg_f1=b_f1.compute()
+                seg_f1, seg_recall, seg_pre, seg_iou=b_f1.compute(), b_recall.compute(), b_pre.compute(), b_iou.compute()
                 avg_seg_f1=sum(seg_f1)/len(seg_f1)
                 # seg_f1_positive=seg_f1[1]
             # print(seg_f1, Best_Seg_F1)
@@ -199,6 +223,9 @@ def main(args):
 
             # print(f"Evaluation for Epoch {epoch} Completed, Seg_F1: {Seg_F1}, Seg_Acc: {Seg_Acc}, Seg_Pre: {Seg_Pre}, Seg_Rec: {Seg_Rec}, CD_F1: {CD_F1}, CD_Acc: {CD_Acc}, CD_Pre: {CD_Pre}, CD_Rec: {CD_Rec}")
             accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_F1: {seg_f1}, Averaged_Current_Seg_F1:", {sum(seg_f1)/len(seg_f1)})
+            accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_Recall: {seg_recall}, Averaged_Current_Seg_Recall:", {sum(seg_recall)/len(seg_recall)})
+            accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_Pre: {seg_pre}, Averaged_Current_Seg_Pre:", {sum(seg_pre)/len(seg_pre)})
+            accelerator.print(f"Evaluation for Epoch {epoch} Completed, Seg_IoU: {seg_iou}, Averaged_Current_Seg_IoU:", {sum(seg_iou)/len(seg_iou)})
  
             accelerator.print(f'Current Best Seg F1 Score: {Best_Seg_F1}')
 
