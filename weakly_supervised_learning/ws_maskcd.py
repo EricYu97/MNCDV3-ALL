@@ -586,7 +586,11 @@ class WS_MaskCDLoss(nn.Module):
             m_norm = m_flat / m_sum
             
             entropy = - (m_norm * torch.log(m_norm + self.eps)).sum(dim=1)
-            return entropy.mean()
+            # pixel_count = H * W
+            pixel_count = torch.tensor(H * W, device=mask_logits.device, dtype=torch.float)
+            max_entropy = torch.log(pixel_count)
+            normalized_entropy = entropy / max_entropy
+            return normalized_entropy.mean()
         else:
             # 负样本：【修改】全图抑制 (Sparsity Loss)
             # 我们希望选出来的 Top-k Mask 也是全黑的
@@ -2659,10 +2663,10 @@ class WS_MaskCD(Mask2FormerPreTrainedModel):
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
             "loss_mil": 1.0,
-            "loss_entropy_reg": 0.05,
+            "loss_entropy_reg": 0.1,
             "loss_ranking": 2.0,
             # "loss_attention": 0.1,
-            "loss_mask_consistency": 0.01,
+            "loss_mask_consistency": 0.5,
         }
 
         self.class_predictor = nn.Linear(config.hidden_dim, config.num_labels + 1)
